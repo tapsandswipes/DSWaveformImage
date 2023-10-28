@@ -60,7 +60,7 @@ public struct WaveformView<Content: View>: View {
                 let samplesNeeded = Int(size.width * configuration.scale)
                 let samples = try await WaveformAnalyzer().samples(fromAudioAt: url, count: samplesNeeded)
                 
-                guard !Task.isCancelled else { return }
+                try Task.checkCancellation()
                 
                 await MainActor.run { self.samples = samples }
             } catch is CancellationError {

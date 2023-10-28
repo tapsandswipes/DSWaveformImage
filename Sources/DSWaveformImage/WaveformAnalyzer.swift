@@ -38,6 +38,8 @@ public struct WaveformAnalyzer: Sendable {
                 throw AnalyzeError.emptyTracks
             }
 
+            try Task.checkCancellation()
+            
             return try await waveformSamples(track: assetTrack, reader: assetReader, count: count, fftBands: nil).amplitudes
         }.value
     }
@@ -81,6 +83,8 @@ fileprivate extension WaveformAnalyzer {
         let totalSamples = try await totalSamples(of: audioAssetTrack)
         let analysis = extract(totalSamples, downsampledTo: requiredNumberOfSamples, from: assetReader, fftBands: fftBands)
 
+        try Task.checkCancellation()
+        
         switch assetReader.status {
         case .completed:
             return analysis
@@ -227,6 +231,8 @@ fileprivate extension WaveformAnalyzer {
         var totalSamples = 0
         let (descriptions, timeRange) = try await audioAssetTrack.load(.formatDescriptions, .timeRange)
 
+        try Task.checkCancellation()
+        
         descriptions.forEach { formatDescription in
             guard let basicDescription = CMAudioFormatDescriptionGetStreamBasicDescription(formatDescription) else { return }
             let channelCount = Int(basicDescription.pointee.mChannelsPerFrame)
