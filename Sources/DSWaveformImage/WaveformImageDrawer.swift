@@ -17,30 +17,42 @@ public class WaveformImageDrawer: ObservableObject {
     /// Keep track of how many samples we are adding each draw cycle
     private var lastSampleCount: Int = 0
 
-#if compiler(>=5.5) && canImport(_Concurrency)
     /// Async analyzes the provided audio and renders a DSImage of the waveform data calculated by the analyzer.
+    /// - Parameter fromAudioAt: local filesystem URL of the audio file to process.
+    /// - Parameter with: `Waveform.Configuration` to be used.
+    /// - Parameter renderer: optional `WaveformRenderer` to adapt how the waveform shall be rendered.
+    /// - Parameter qos: QoS of the DispatchQueue the calculations are performed (and returned) on.
+    ///
+    /// Returns the image on a background thread.
     public func waveformImage(fromAudioAt audioAssetURL: URL,
                               with configuration: Waveform.Configuration,
                               renderer: WaveformRenderer = LinearWaveformRenderer(),
                               qos: DispatchQoS.QoSClass = .userInitiated) async throws -> DSImage {
-        try await withCheckedThrowingContinuation { continuation in
-            waveformImage(fromAudioAt: audioAssetURL, with: configuration, renderer: renderer, qos: qos) { result in
-                switch result {
-                case let .success(waveformImage): continuation.resume(with: .success(waveformImage))
-                case let .failure(error): continuation.resume(with: .failure(error))
-                }
-            }
-        }
+        try await render(fromAudioAt: audioAssetURL, with: configuration, renderer: renderer, qos: qos)
     }
-#endif
 
     /// Async analyzes the provided audio and renders a DSImage of the waveform data calculated by the analyzer.
+    /// - Parameter fromAudioAt: local filesystem URL of the audio file to process.
+    /// - Parameter with: `Waveform.Configuration` to be used.
+    /// - Parameter renderer: optional `WaveformRenderer` to adapt how the waveform shall be rendered.
+    /// - Parameter qos: QoS of the DispatchQueue the calculations are performed (and returned) on.
+    /// - Parameter completionHandler: called from a background thread. Returns the sampled result `DSImage` or `Error`.
+    ///
+    /// Calls the completionHandler on a background thread.
+    @available(*, deprecated, renamed: "waveformImage(fromAudioAt:with:renderer:qos:)")
     public func waveformImage(fromAudioAt audioAssetURL: URL,
                               with configuration: Waveform.Configuration,
                               renderer: WaveformRenderer = LinearWaveformRenderer(),
                               qos: DispatchQoS.QoSClass = .userInitiated,
                               completionHandler: @escaping (Result<DSImage, Error>) -> ()) {
-        render(fromAudioAt: audioAssetURL, with: configuration, qos: qos, renderer: renderer, completionHandler: completionHandler)
+        Task {
+            do {
+                let image = try await render(fromAudioAt: audioAssetURL, with: configuration, renderer: renderer, qos: qos)
+                completionHandler(.success(image))
+            } catch {
+                completionHandler(.failure(error))
+            }
+        }
     }
 }
 
@@ -109,26 +121,21 @@ extension WaveformImageDrawer {
 // MARK: Image generation
 
 private extension WaveformImageDrawer {
-    func render(fromAudioAt audioAssetURL: URL,
-                with configuration: Waveform.Configuration,
-                qos: DispatchQoS.QoSClass,
-                renderer: WaveformRenderer,
-                completionHandler: @escaping (Result<DSImage, Error>) -> ()) {
+    func render(
+        fromAudioAt audioAssetURL: URL,
+        with configuration: Waveform.Configuration,
+        renderer: WaveformRenderer,
+        qos: DispatchQoS.QoSClass
+    ) async throws -> DSImage {
         let sampleCount = Int(configuration.size.width * configuration.scale)
         let waveformAnalyzer = WaveformAnalyzer()
-        waveformAnalyzer.samples(fromAudioAt: audioAssetURL, count: sampleCount, qos: qos) { result in
-            switch result {
-            case let .success(samples):
-                let dampedSamples = configuration.shouldDamp ? self.damp(samples, with: configuration) : samples
-                if let image = self.waveformImage(from: dampedSamples, with: configuration, renderer: renderer) {
-                    completionHandler(.success(image))
-                } else {
-                    completionHandler(.failure(GenerationError.generic))
-                }
+        let samples = try await waveformAnalyzer.samples(fromAudioAt: audioAssetURL, count: sampleCount, qos: qos)
+        let dampedSamples = configuration.shouldDamp ? self.damp(samples, with: configuration) : samples
 
-            case let .failure(error):
-                completionHandler(.failure(error))
-            }
+        if let image = waveformImage(from: dampedSamples, with: configuration, renderer: renderer) {
+            return image
+        } else {
+            throw GenerationError.generic
         }
     }
 

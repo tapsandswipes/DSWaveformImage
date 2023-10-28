@@ -1,9 +1,9 @@
-DSWaveformImage - iOS & macOS realtime audio waveform rendering
+DSWaveformImage - iOS, macOS & visionOS realtime audio waveform rendering
 ===============
 [![Swift Package Manager compatible](https://img.shields.io/badge/spm-compatible-brightgreen.svg?style=flat)](https://swift.org/package-manager)
 
 DSWaveformImage offers a native interfaces for drawing the envelope waveform of audio data 
-in **iOS**, **iPadOS**, **macOS** or via Catalyst. To do so, you can use
+in **iOS**, **iPadOS**, **macOS**, **visionOS** or via Catalyst. To do so, you can use
 
 * [`WaveformImageView`](Sources/DSWaveformImageViews/UIKit/WaveformImageView.swift) (UIKit) / [`WaveformView`](Sources/DSWaveformImageViews/SwiftUI/WaveformView.swift) (SwiftUI) to render a static waveform from an audio file or 
 * [`WaveformLiveView`](Sources/DSWaveformImageViews/UIKit/WaveformLiveView.swift) (UIKit) / [`WaveformLiveCanvas`](Sources/DSWaveformImageViews/SwiftUI/WaveformLiveCanvas.swift) (SwiftUI) to realtime render a waveform of live audio data (e.g. from `AVAudioRecorder`)
@@ -46,12 +46,6 @@ import DSWaveformImage // for core classes to generate `UIImage` / `NSImage` dir
 import DSWaveformImageViews // if you want to use the native UIKit / SwiftUI views
 ```
 
-**Deprecated or discouraged** but still possible alternative ways for older apps:
-
-* since it has no other dependencies you may simply copy the `Sources` folder directly into your project
-* use carthage: `github "dmrschmidt/DSWaveformImage" ~> 7.0` (last supported version is 10)
-* or, sunset since 6.1.1: ~~use cocoapods: `pod 'DSWaveformImage', '~> 6.1'`~~
-
 Usage
 -----
 
@@ -78,6 +72,18 @@ Default styling may be overridden if you have more complex requirements:
 WaveformView(audioURL: audioURL) { waveformShape in
     waveformShape
         .stroke(LinearGradient(colors: [.red, [.green, red, orange], startPoint: .zero, endPoint: .topTrailing), lineWidth: 3)
+}
+```
+
+Similar to [AsyncImage](https://developer.apple.com/documentation/swiftui/asyncimage/init(url:scale:content:placeholder:)), a placeholder can be
+set to show until the load and render operation completes successfully. Thanks to [@alfogrillo](https://github.com/alfogrillo)!
+
+```swift
+WaveformView(audioURL: audioURL) { waveformShape in
+    waveformShape
+        .stroke(LinearGradient(colors: [.red, [.green, red, orange], startPoint: .zero, endPoint: .topTrailing), lineWidth: 3)
+} placeholder: {
+    ProgressView()
 }
 ```
 
@@ -128,18 +134,15 @@ Check `Waveform.Configuration` in [WaveformImageTypes](./Sources/DSWaveformImage
 ```swift
 let waveformImageDrawer = WaveformImageDrawer()
 let audioURL = Bundle.main.url(forResource: "example_sound", withExtension: "m4a")!
-waveformImageDrawer.waveformImage(fromAudioAt: audioURL, with: .init(
-                                  size: topWaveformView.bounds.size,
-                                  style: .filled(UIColor.black)),
-                                  renderer: LinearWaveformRenderer()) { result in
-    guard let .success(image) = result else {
-        return
-    }
+let image = try await waveformImageDrawer.waveformImage(
+    fromAudioAt: audioURL,
+    with: .init(size: topWaveformView.bounds.size, style: .filled(UIColor.black)),
+    renderer: LinearWaveformRenderer()
+)
 
-    // need to jump back to main queue
-    DispatchQueue.main.async {
-        self.topWaveformView.image = image
-    }
+// need to jump back to main queue
+DispatchQueue.main.async {
+    self.topWaveformView.image = image
 }
 ```
 
@@ -148,33 +151,13 @@ waveformImageDrawer.waveformImage(fromAudioAt: audioURL, with: .init(
 ```swift
 let audioURL = Bundle.main.url(forResource: "example_sound", withExtension: "m4a")!
 waveformAnalyzer = WaveformAnalyzer()
-waveformAnalyzer.samples(fromAudioAt: audioURL, count: 200) { result in
-    print("result: \(result)")
-}
+let samples = try await waveformAnalyzer.samples(fromAudioAt: audioURL, count: 200)
+print("samples: \(samples)")
 ```
-
-### `async` / `await` Support
-
-The public API has been updated in 9.1 to support `async` / `await`. See the example app for an illustration.
-
-```swift
-public class WaveformAnalyzer {
-    func samples(fromAudioAt audioAssetURL: URL, count: Int, qos: DispatchQoS.QoSClass = .userInitiated) async throws -> [Float]
-}
-
-public class WaveformImageDrawer {
-    public func waveformImage(
-        fromAudioAt audioAssetURL: URL,
-        with configuration: Waveform.Configuration,
-        qos: DispatchQoS.QoSClass = .userInitiated
-    ) async throws -> UIImage
-}
-```
-
 
 ### Playback Progress Indication
 
-If you're playing back audio files and would like to indicate the playback progress to your users, you can [find inspiration in the example app](https://github.com/dmrschmidt/DSWaveformImage/blob/main/Example/DSWaveformImageExample-iOS/ProgressViewController.swift). UIKit and SwiftUI examples are provided.
+If you're playing back audio files and would like to indicate the playback progress to your users, you can [find inspiration in the example app](https://github.com/dmrschmidt/DSWaveformImage/blob/main/Example/DSWaveformImageExample-iOS/ProgressViewController.swift). UIKit and [SwiftUI](https://github.com/dmrschmidt/DSWaveformImage/blob/main/Example/DSWaveformImageExample-iOS/SwiftUIExample/ProgressWaveformView.swift) examples are provided.
 
 Both approaches will result in something like the image below. 
 
