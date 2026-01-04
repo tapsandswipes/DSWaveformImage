@@ -138,13 +138,9 @@ struct SwiftUIExampleView: View {
                     WaveformShape(samples: samples)
                         .fill(Color.orange)
                         .task {
-                            do {
-                                let samplesNeeded = Int(geometry.size.width * configuration.scale)
-                                let samples = try await WaveformAnalyzer().samples(fromAudioAt: audioURL, count: samplesNeeded)
-                                await MainActor.run { self.samples = samples }
-                            } catch {
-                                assertionFailure(error.localizedDescription)
-                            }
+                            let samplesNeeded = Int(geometry.size.width * configuration.scale)
+                            let samples = try await WaveformAnalyzer().samples(fromAudioAt: audioURL, count: samplesNeeded)
+                            await MainActor.run { self.samples = samples }
                         }
                 }
             }

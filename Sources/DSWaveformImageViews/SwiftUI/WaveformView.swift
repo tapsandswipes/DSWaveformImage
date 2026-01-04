@@ -11,7 +11,7 @@ public struct WaveformView<Content: View>: View {
     private let content: (WaveformShape) -> Content
 
     @State private var samples: [Float] = []
-    @State private var updateTask: Task<Void, Never>? {
+    @State private var updateTask: Task<Void, any Error>? {
         willSet {
             updateTask?.cancel()
         }
@@ -66,7 +66,7 @@ public struct WaveformView<Content: View>: View {
             } catch is CancellationError {
                 // no-op
             } catch {
-                assertionFailure(error.localizedDescription)
+                throw error
             }
         }
     }
